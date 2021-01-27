@@ -5,17 +5,17 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <!-- Include jQuery -->
+    <!-- Include jQuery Library -->
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     
-    <!-- Include Bootstrap CSS -->
+    <!-- Include Bootstrap Library -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
     
-    <!-- Include Date Range Picker https://formden.com/blog/date-picker -->
+    <!-- Include Date Picker Library https://formden.com/blog/date-picker -->
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.4.1/js/bootstrap-datepicker.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.4.1/css/bootstrap-datepicker3.css"/>
 
-    <!-- Include Clock Picker http://weareoutman.github.io/clockpicker/ -->
+    <!-- Include Clock Picker Library http://weareoutman.github.io/clockpicker/ -->
     <link rel="stylesheet" type="text/css" href="dist/bootstrap-clockpicker.min.css">
     <script type="text/javascript" src="dist/bootstrap-clockpicker.min.js"></script>
 
@@ -43,53 +43,81 @@
       <div class="row">
           <div class="col-xs-12 col-sm-12 col-md-8">
           	<label class="control-label">List of locations</label>
-          	<select class="form-control" id="locations"></select>
+          	<select class="form-control" id="locations" name="locations"></select>
           </div>
           <div class="col-md-4">
-          	<span id="weather"></span>
+          	<span id="weather" name="weather"></span>
           </div>
       </div>
 
       <p />
       <div class="row">
           <div class="col-xs-12 col-sm-12 col-md-8">
-          	<img src="" id="screenshot">
+          	<img src="" id="screenshot" name="screenshot">
           </div>
       </div>
 
     <script>
+    
+    // Array to store locations imageUrl, latitude and longitude
+    var locationsValueArray = [];
+    var locationsValueArrayIndex = 0;
+    
+    
     $(document).ready(function() {
     
+       // Configration for Date Picker https://formden.com/blog/date-picker
+       var date_input=$('input[name="date"]'); //our date input has the name "date"
+       var container=$('.bootstrap-iso form').length>0 ? $('.bootstrap-iso form').parent() : "body";
+       var options={
+          format: 'yyyy-mm-dd',
+          container: container,
+          todayHighlight: true,
+          autoclose: true,
+       };
+       date_input.datepicker(options);
+       
+       // Configuration for Clock Picker http://weareoutman.github.io/clockpicker/
+       $('.clockpicker').clockpicker({
+          default: 'now',
+          autoclose: 'true'
+       });
+    
+       // Event handling for date 
        $('#date').change(function (event) {
           var dataValue = $('#date').val();
           var timeValue = $('#time').val();
           if (dataValue != "" && timeValue != "") { callTrafficAPI(dataValue, timeValue); }
        });
        
+       // Event handling for time
        $('#time').change(function (event) {
           var dataValue = $('#date').val();
           var timeValue = $('#time').val();
           if (dataValue != "" && timeValue != "") { callTrafficAPI(dataValue, timeValue); }
        });
        
+       // Event handling for locations
        $('#locations').click(function (event) {
           var locationsValue = $('#locations').val();
-          var locationFields = locationsValue.split(';');
+          
+          // Retrieve locations imageUrl, latitude and longitude from Array
+          var locationFields = locationsValueArray[locationsValue].split(';');
 	  
 	  if (locationFields.length == 3)
 	  {
 	     var imageUrl = locationFields[0];
 	     var locationLatitude = locationFields[1];
-	     var locationlongitude = locationFields[2];
-	     
-	     updateScreenshot(imageUrl);
+	     var locationLongitude = locationFields[2];
 	     
 	     var dataValue = $('#date').val();
 	     var timeValue = $('#time').val();
 	     
+	     updateScreenshot(imageUrl);
+	     
 	     if (dataValue != "" && timeValue != "") 
 	     {
-	        callWeatherAPI(dataValue, timeValue, locationLatitude, locationlongitude);
+	        callWeatherAPI(dataValue, timeValue, locationLatitude, locationLongitude);
 	     }
 	  }
        });
@@ -108,7 +136,13 @@
          dataType: "json"
         })
          .done( function (responseText) {
-            // Triggered if response status code is 200 (OK)         
+            // Triggered if response status code is 200 (OK)
+            
+            // Empty locations dropdown options; Reset locations array & array index
+            $('#locations').children().remove().end();
+            locationsValueArray = [];
+            locationsValueArrayIndex = 0;
+                    
             $.each(responseText["items"]["0"]["cameras"], function(key,value) {
   		var imageUrl = value.image;
   		var locationLatitude = value.location.latitude;
@@ -139,10 +173,16 @@
             var locationLocality = responseText.locality;
             var locationDropdownValue = imageUrl + ";" +locationLatitude +";" +locationlongitude;
             
-            //update locations dropdown options 
+            // Add to locations array
+            locationsValueArray.push(locationDropdownValue);
+            
+            // Update locations dropdown options 
             $('#locations').append(
-               $('<option></option>').val(locationDropdownValue).html(locationLocality)
+               $('<option></option>').val(locationsValueArrayIndex).html(locationLocality)
             );
+            
+            // Increment location array index
+            locationsValueArrayIndex = locationsValueArrayIndex + 1;
          })
          .fail( function (jqXHR, status, error) {
             // Triggered if response status code is NOT 200 (OK)
@@ -152,10 +192,10 @@
   
     function updateScreenshot(imageUrl)
     {
-       $('#screenshot').attr('src',imageUrl);
+        $('#screenshot').attr('src',imageUrl);
     }
     
-    function callWeatherAPI(dataValue, timeValue, locationLatitude, locationlongitude)
+    function callWeatherAPI(dataValue, timeValue, locationLatitude, locationLongitude)
     {
         var apiDateTimeValue = dataValue +"T" +timeValue +":00";
             
@@ -168,31 +208,29 @@
         })
          .done( function (responseText) {
             // Triggered if response status code is 200 (OK)
-            var selectedLocation = locationLatitude * locationlongitude;
-            var nearestLocationValue = 999;
+            var selectedLocationMatrix = locationLatitude * locationLongitude;
             var nearestLocationText = "";
-            
-            //alert(responseText["items"]["0"]["forecasts"]["0"].forecast);
-            
-            // To derive the nearest location
+            var nearestLocationMatrix = 999;
+                        
+            // To identify the nearest location
             $.each(responseText.area_metadata, function(key,value) {
   		var metadataLatitude = value.label_location.latitude;
   		var metadataLongitude = value.label_location.longitude;
-  		var metadataLocation = metadataLatitude * metadataLongitude;
+  		var metadataLocationMatrix = metadataLatitude * metadataLongitude;
   		
-  		if (metadataLocation > selectedLocation)
+  		if (metadataLocationMatrix > selectedLocationMatrix) // To make sure the computation does not return a negative value for comparison with nearestLocationMatrix
   		{
-  		   if ((metadataLocation - selectedLocation) < nearestLocationValue)
+  		   if ((metadataLocationMatrix - selectedLocationMatrix) < nearestLocationMatrix)
   		   {
-  		      nearestLocationValue = (metadataLocation - selectedLocation);
+  		      nearestLocationMatrix = (metadataLocationMatrix - selectedLocationMatrix);
   		      nearestLocationText = value.name;
   		   }
   		}
-  		else
+  		else // To make sure the computation does not return a negative value for comparison with nearestLocationMatrix
   		{
-  		   if ((selectedLocation - metadataLocation) < nearestLocationValue)
+  		   if ((selectedLocationMatrix - metadataLocationMatrix) < nearestLocationMatrix)
   		   {
-  		      nearestLocationValue = (selectedLocation - metadataLocation);
+  		      nearestLocationMatrix = (selectedLocationMatrix - metadataLocationMatrix);
   		      nearestLocationText = value.name;
   		   }
   		}
@@ -217,33 +255,9 @@
             alert(jqXHR.responseText);
          });   
     }
-
     </script>
 
-    <!-- Include Clock Picker http://weareoutman.github.io/clockpicker/ -->
-    <script type="text/javascript">
-    $('.clockpicker').clockpicker({
-       default: 'now',
-       autoclose: 'true'
-    });
-    </script>
-     
-    <!-- Include Date Range Picker https://formden.com/blog/date-picker -->
-    <script>
-    $(document).ready(function(){
-      var date_input=$('input[name="date"]'); //our date input has the name "date"
-      var container=$('.bootstrap-iso form').length>0 ? $('.bootstrap-iso form').parent() : "body";
-      var options={
-        format: 'yyyy-mm-dd',
-        container: container,
-        todayHighlight: true,
-        autoclose: true,
-      };
-      date_input.datepicker(options);
-    })
-    </script>
-
-    <!-- Bootstrap Bundle with Popper -->
+    <!-- Include Bootstrap Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.bundle.min.js" integrity="sha384-ygbV9kiqUc6oa4msXn9868pTtWMgiQaeYH7/t7LECLbyPA2x65Kgf80OJFdroafW" crossorigin="anonymous"></script>
 
   </body>

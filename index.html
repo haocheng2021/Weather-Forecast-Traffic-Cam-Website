@@ -21,22 +21,21 @@
 
     <title>Weather Forecast Traffic Cam Website</title>
   </head>
-  
   <body>
     
       <p />
       <div class="row">
           <div class="col-xs-6 col-sm-6 col-md-4">
           	<label class="control-label">Date</label>
-          	<input class="form-control" id="date" name="date" placeholder="YYYY-MM-DD" type="text"/>
+          	<input class="form-control" id="date" name='date' placeholder="YYYY-MM-DD" type="text"/>
           </div>
           <div class="col-xs-6 col-sm-6 col-md-4">
           	<label class="control-label">Time</label>
           	<div class="input-group clockpicker">
-    		       <input type="text" class="form-control" placeholder="HH:MM">
-    		       <span class="input-group-addon"></span>
-        	     <span class="glyphicon glyphicon-time"></span>    
-		        </div>
+    		   <input class="form-control" id="time" name='time' placeholder="HH:MM" type="text">
+    		   <span class="input-group-addon"></span>
+        	   <span class="glyphicon glyphicon-time"></span>    
+		</div>
           </div>
       </div>
 
@@ -44,29 +43,182 @@
       <div class="row">
           <div class="col-xs-12 col-sm-12 col-md-8">
           	<label class="control-label">List of locations</label>
-          	<select class="form-control" disabled></select>
+          	<select class="form-control" id="locations"></select>
           </div>
           <div class="col-md-4">
-          	<label class="control-label">Weather</label>
-          	<img src="">
+          	<span id="weather"></span>
           </div>
       </div>
 
       <p />
       <div class="row">
           <div class="col-xs-12 col-sm-12 col-md-8">
-          	<label class="control-label">Screenshot</label>
-          	<img src="">
+          	<img src="" id="screenshot">
           </div>
       </div>
+
+    <script>
+    $(document).ready(function() {
+    
+       $('#date').change(function (event) {
+          var dataValue = $('#date').val();
+          var timeValue = $('#time').val();
+          if (dataValue != "" && timeValue != "") { callTrafficAPI(dataValue, timeValue); }
+       });
+       
+       $('#time').change(function (event) {
+          var dataValue = $('#date').val();
+          var timeValue = $('#time').val();
+          if (dataValue != "" && timeValue != "") { callTrafficAPI(dataValue, timeValue); }
+       });
+       
+       $('#locations').click(function (event) {
+          var locationsValue = $('#locations').val();
+          var locationFields = locationsValue.split(';');
+	  
+	  if (locationFields.length == 3)
+	  {
+	     var imageUrl = locationFields[0];
+	     var locationLatitude = locationFields[1];
+	     var locationlongitude = locationFields[2];
+	     
+	     updateScreenshot(imageUrl);
+	     
+	     var dataValue = $('#date').val();
+	     var timeValue = $('#time').val();
+	     
+	     if (dataValue != "" && timeValue != "") 
+	     {
+	        callWeatherAPI(dataValue, timeValue, locationLatitude, locationlongitude);
+	     }
+	  }
+       });
       
-      <p />
-      <div class="row">
-          <div class="col-xs-12 col-sm-12 col-md-8">
-          	<span id="ajaxResponse">ajax response..</span>
-          </div>
-      </div>
+    });
+    
+    function callTrafficAPI(dataValue, timeValue)
+    {
+        var apiDateTimeValue = dataValue +"T" +timeValue +":00";
+            
+    	$.ajax({
+         type: 'GET',
+         url:  'https://api.data.gov.sg/v1/transport/traffic-images',
+         data: { date_time: apiDateTimeValue },
+         contentType: "application/json",
+         dataType: "json"
+        })
+         .done( function (responseText) {
+            // Triggered if response status code is 200 (OK)         
+            $.each(responseText["items"]["0"]["cameras"], function(key,value) {
+  		var imageUrl = value.image;
+  		var locationLatitude = value.location.latitude;
+  		var locationlongitude = value.location.longitude;
+  		
+  	        callReverseGeocodingAPI(imageUrl, locationLatitude, locationlongitude);
+	    });
+         })
+         .fail( function (jqXHR, status, error) {
+            // Triggered if response status code is NOT 200 (OK)
+            alert(jqXHR.responseText);
+            $('#date').val("");
+            $('#time').val("");
+         });  
+    }
+    
+    function callReverseGeocodingAPI(imageUrl, locationLatitude, locationlongitude)
+    {
+       $.ajax({
+         type: 'GET',
+         url:  'https://api.bigdatacloud.net/data/reverse-geocode-client',
+         data: { latitude: locationLatitude, longitude: locationlongitude },
+         contentType: "application/json",
+         dataType: "json"
+        })
+         .done( function (responseText) {
+            // Triggered if response status code is 200 (OK)         
+            var locationLocality = responseText.locality;
+            var locationDropdownValue = imageUrl + ";" +locationLatitude +";" +locationlongitude;
+            
+            //update locations dropdown options 
+            $('#locations').append(
+               $('<option></option>').val(locationDropdownValue).html(locationLocality)
+            );
+         })
+         .fail( function (jqXHR, status, error) {
+            // Triggered if response status code is NOT 200 (OK)
+            alert(jqXHR.responseText);
+         });
+    }
+  
+    function updateScreenshot(imageUrl)
+    {
+       $('#screenshot').attr('src',imageUrl);
+    }
+    
+    function callWeatherAPI(dataValue, timeValue, locationLatitude, locationlongitude)
+    {
+        var apiDateTimeValue = dataValue +"T" +timeValue +":00";
+            
+    	$.ajax({
+         type: 'GET',
+         url:  'https://api.data.gov.sg/v1/environment/2-hour-weather-forecast',
+         data: { date_time: apiDateTimeValue },
+         contentType: "application/json",
+         dataType: "json"
+        })
+         .done( function (responseText) {
+            // Triggered if response status code is 200 (OK)
+            var selectedLocation = locationLatitude * locationlongitude;
+            var nearestLocationValue = 999;
+            var nearestLocationText = "";
+            
+            //alert(responseText["items"]["0"]["forecasts"]["0"].forecast);
+            
+            // To derive the nearest location
+            $.each(responseText.area_metadata, function(key,value) {
+  		var metadataLatitude = value.label_location.latitude;
+  		var metadataLongitude = value.label_location.longitude;
+  		var metadataLocation = metadataLatitude * metadataLongitude;
+  		
+  		if (metadataLocation > selectedLocation)
+  		{
+  		   if ((metadataLocation - selectedLocation) < nearestLocationValue)
+  		   {
+  		      nearestLocationValue = (metadataLocation - selectedLocation);
+  		      nearestLocationText = value.name;
+  		   }
+  		}
+  		else
+  		{
+  		   if ((selectedLocation - metadataLocation) < nearestLocationValue)
+  		   {
+  		      nearestLocationValue = (selectedLocation - metadataLocation);
+  		      nearestLocationText = value.name;
+  		   }
+  		}
+ 	    });
+ 	    
+ 	    // To extract the weather forecast
+ 	    $.each(responseText["items"]["0"]["forecasts"], function(key,value) {
+ 	    	var area = value.area;
+ 	    	var forecast = value.forecast;
+ 	    	
+ 	    	if (area == nearestLocationText)
+ 	    	{  
+ 	    	   $('#weather').html(forecast);
+ 	    	   return false;
+ 	    	}
+ 	    });
 
+	    
+         })
+         .fail( function (jqXHR, status, error) {
+            // Triggered if response status code is NOT 200 (OK)
+            alert(jqXHR.responseText);
+         });   
+    }
+
+    </script>
 
     <!-- Include Clock Picker http://weareoutman.github.io/clockpicker/ -->
     <script type="text/javascript">
